@@ -1,0 +1,1323 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="LUXOR Watches — relógios premium, clássicos e modernos.">
+<title>LUXOR Watches | Relógios Premium</title>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:#080808;
+  --card:#111;
+  --gold:#c9a45c;
+  --gold2:#f0d38a;
+  --text:#f5f5f5;
+  --muted:#aaa;
+  --line:#242424
+}
+
+html{scroll-behavior:smooth}
+
+body{
+  font-family:Arial,Helvetica,sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  line-height:1.5
+}
+
+a{text-decoration:none;color:inherit}
+
+.site-header{
+  height:76px;
+  padding:0 6%;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  border-bottom:1px solid var(--line);
+  position:sticky;
+  top:0;
+  background:rgba(8,8,8,.96);
+  backdrop-filter:blur(12px);
+  z-index:20
+}
+
+.logo{
+  font-size:28px;
+  letter-spacing:7px;
+  font-weight:800;
+  color:var(--gold)
+}
+
+#mainNav{
+  display:flex;
+  gap:28px;
+  align-items:center
+}
+
+#mainNav a{
+  font-size:14px;
+  color:#ddd
+}
+
+#mainNav a:hover{
+  color:var(--gold)
+}
+
+.menu-toggle{
+  display:none;
+  background:none;
+  border:0;
+  color:white;
+  font-size:28px
+}
+
+.hero{
+  min-height:650px;
+  padding:80px 7%;
+  display:grid;
+  grid-template-columns:1.1fr .9fr;
+  align-items:center;
+  background:radial-gradient(
+    circle at 75% 45%,
+    #292112 0,
+    #0b0b0b 35%,
+    #080808 70%
+  )
+}
+
+.eyebrow{
+  font-size:12px;
+  letter-spacing:3px;
+  color:var(--gold);
+  font-weight:700
+}
+
+.hero h1{
+  font-size:clamp(52px,7vw,92px);
+  line-height:.98;
+  margin:20px 0
+}
+
+.hero h1 span,
+.section-heading h2 span,
+.promo h2 span{
+  color:var(--gold)
+}
+
+.hero p{
+  max-width:580px;
+  color:#bbb;
+  font-size:18px;
+  margin-bottom:32px
+}
+
+.hero-actions{
+  display:flex;
+  gap:14px;
+  flex-wrap:wrap
+}
+
+.btn{
+  display:inline-block;
+  padding:15px 24px;
+  background:var(--gold);
+  color:#090909;
+  font-weight:800;
+  font-size:13px;
+  letter-spacing:1px;
+  border:1px solid var(--gold)
+}
+
+.btn-outline{
+  background:transparent;
+  color:var(--gold)
+}
+
+.hero-visual{
+  display:grid;
+  place-items:center
+}
+
+.watch-orbit{
+  width:330px;
+  height:330px;
+  border:1px solid #5b492a;
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  font-size:150px;
+  background:radial-gradient(circle,#262015,#0a0a0a);
+  box-shadow:0 0 90px rgba(201,164,92,.12)
+}
+
+.benefits{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:1px;
+  background:var(--line);
+  border-top:1px solid var(--line);
+  border-bottom:1px solid var(--line)
+}
+
+.benefits>div{
+  padding:25px 28px;
+  background:#0c0c0c;
+  display:flex;
+  gap:14px;
+  align-items:center
+}
+
+.benefits strong{
+  color:var(--gold);
+  font-size:22px
+}
+
+.benefits span{
+  font-weight:700;
+  font-size:14px
+}
+
+.benefits small{
+  font-weight:400;
+  color:#888
+}
+
+.catalog{
+  padding:90px 7%
+}
+
+.section-heading{
+  display:flex;
+  justify-content:space-between;
+  gap:30px;
+  align-items:end
+}
+
+.section-heading h2{
+  font-size:44px;
+  margin-top:10px
+}
+
+.catalog-tools{
+  display:flex;
+  gap:10px
+}
+
+.catalog-tools input,
+.catalog-tools select{
+  background:#111;
+  border:1px solid #333;
+  color:white;
+  padding:13px 15px;
+  border-radius:4px
+}
+
+.catalog-tools input{
+  min-width:240px
+}
+
+.categories{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin:35px 0
+}
+
+.category{
+  background:#111;
+  border:1px solid #333;
+  color:#bbb;
+  padding:11px 18px;
+  cursor:pointer;
+  border-radius:30px
+}
+
+.category.active,
+.category:hover{
+  background:var(--gold);
+  color:#080808;
+  border-color:var(--gold)
+}
+
+.product-grid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:20px
+}
+
+.product-card{
+  background:var(--card);
+  border:1px solid var(--line);
+  overflow:hidden;
+  transition:.25s
+}
+
+.product-card:hover{
+  transform:translateY(-5px);
+  border-color:#5a492d
+}
+
+.product-image{
+  height:360px;
+  background:#0d0d0d;
+  position:relative;
+  overflow:hidden
+}
+
+.carousel-track{
+  height:100%;
+  width:100%;
+  display:flex;
+  overflow-x:auto;
+  overflow-y:hidden;
+  scroll-snap-type:x mandatory;
+  scroll-snap-stop:always;
+  scroll-behavior:smooth;
+  scrollbar-width:none;
+  -webkit-overflow-scrolling:touch;
+  touch-action:pan-x pan-y;
+  overscroll-behavior-x:contain;
+  scroll-padding:0;
+  margin:0;
+  padding:0;
+  gap:0;
+  box-sizing:border-box;
+  contain:layout paint
+}
+
+.carousel-track::-webkit-scrollbar{
+  display:none
+}
+
+.carousel-slide{
+  flex:0 0 100%;
+  min-width:100%;
+  max-width:100%;
+  width:100%;
+  height:100%;
+  scroll-snap-align:start;
+  scroll-snap-stop:always;
+  box-sizing:border-box;
+  overflow:hidden;
+  background:#0d0d0d;
+  margin:0;
+  padding:0;
+  border:0
+}
+
+.carousel-slide img{
+  width:100%;
+  height:100%;
+  max-width:100%;
+  object-fit:cover;
+  display:block;
+  user-select:none;
+  -webkit-user-drag:none;
+  margin:0;
+  padding:0;
+  border:0;
+  box-sizing:border-box
+}
+
+.carousel-btn{
+  position:absolute;
+  top:50%;
+  transform:translateY(-50%);
+  z-index:4;
+  width:32px;
+  height:32px;
+  border:1px solid rgba(255,255,255,.25);
+  border-radius:50%;
+  background:rgba(0,0,0,.6);
+  color:#fff;
+  cursor:pointer;
+  font-size:21px
+}
+
+.carousel-btn.prev{
+  left:8px
+}
+
+.carousel-btn.next{
+  right:8px
+}
+
+.carousel-dots{
+  position:absolute;
+  bottom:8px;
+  left:50%;
+  transform:translateX(-50%);
+  display:flex;
+  gap:5px;
+  z-index:4
+}
+
+.carousel-dot{
+  width:6px;
+  height:6px;
+  border:0;
+  border-radius:50%;
+  padding:0;
+  background:rgba(255,255,255,.45)
+}
+
+.carousel-dot.active{
+  background:var(--gold2)
+}
+
+.product-content{
+  padding:18px
+}
+
+.product-category{
+  font-size:10px;
+  letter-spacing:2px;
+  color:var(--gold)
+}
+
+.product-content h3{
+  font-size:21px;
+  margin:7px 0
+}
+
+.product-content p{
+  font-size:13px;
+  color:#888;
+  min-height:42px;
+  margin-bottom:15px
+}
+
+.product-content strong{
+  font-size:20px;
+  display:block;
+  margin-bottom:15px
+}
+
+.product-buy{
+  width:100%;
+  padding:13px 12px;
+  background:var(--gold);
+  border:1px solid var(--gold);
+  color:#111;
+  font-weight:900;
+  letter-spacing:1px;
+  cursor:pointer;
+  border-radius:4px;
+  transition:.2s
+}
+
+.product-buy:hover{
+  background:#f5d36a;
+  color:#080808;
+  transform:translateY(-1px);
+  box-shadow:0 6px 18px rgba(212,175,55,.25)
+}
+
+.empty{
+  text-align:center;
+  color:#888;
+  padding:50px
+}
+
+.hidden{
+  display:none
+}
+
+.promo{
+  margin:0 7% 90px;
+  padding:70px;
+  background:linear-gradient(110deg,#15120c,#0c0c0c);
+  border:1px solid #3a3020;
+  display:flex;
+  justify-content:space-between;
+  align-items:center
+}
+
+.promo h2{
+  font-size:48px;
+  line-height:1.05;
+  margin:15px 0
+}
+
+.promo p{
+  color:#999;
+  max-width:500px;
+  margin-bottom:25px
+}
+
+.promo-mark{
+  font-size:55px;
+  letter-spacing:8px;
+  color:#292319;
+  text-align:center;
+  font-weight:900
+}
+
+.promo-mark small{
+  font-size:15px;
+  letter-spacing:5px
+}
+
+footer{
+  padding:55px 7%;
+  border-top:1px solid var(--line);
+  display:grid;
+  grid-template-columns:2fr 1fr 1fr 1fr;
+  gap:30px
+}
+
+footer h4{
+  margin-bottom:15px;
+  color:var(--gold)
+}
+
+footer a,
+footer p{
+  display:block;
+  color:#888;
+  font-size:14px;
+  margin:7px 0
+}
+
+.footer-brand p{
+  max-width:300px;
+  margin-top:12px
+}
+
+.copyright{
+  text-align:center;
+  padding:20px;
+  border-top:1px solid var(--line);
+  color:#666;
+  font-size:12px
+}
+
+@media(max-width:1000px){
+
+  .product-grid{
+    grid-template-columns:repeat(3,1fr)
+  }
+
+}
+
+@media(max-width:760px){
+
+  #mainNav{
+    display:none;
+    position:absolute;
+    top:76px;
+    left:0;
+    right:0;
+    background:#0b0b0b;
+    padding:20px;
+    flex-direction:column
+  }
+
+  .menu-toggle{
+    display:block
+  }
+
+  #mainNav.open{
+    display:flex
+  }
+
+  .hero{
+    grid-template-columns:1fr;
+    min-height:auto;
+    padding:70px 6%
+  }
+
+  .hero-visual{
+    display:none
+  }
+
+  .benefits{
+    grid-template-columns:1fr 1fr
+  }
+
+  .section-heading{
+    align-items:stretch;
+    flex-direction:column
+  }
+
+  .catalog-tools{
+    flex-direction:column
+  }
+
+  .catalog-tools input{
+    min-width:0
+  }
+
+  .product-grid{
+    grid-template-columns:repeat(2,1fr)
+  }
+
+  .promo{
+    margin:0 5% 60px;
+    padding:40px 25px
+  }
+
+  .promo-mark{
+    display:none
+  }
+
+  footer{
+    grid-template-columns:1fr 1fr
+  }
+
+}
+
+@media(max-width:480px){
+
+  .product-grid{
+    grid-template-columns:1fr
+  }
+
+  .benefits{
+    grid-template-columns:1fr
+  }
+
+  .hero h1{
+    font-size:52px
+  }
+
+  .section-heading h2{
+    font-size:36px
+  }
+
+  footer{
+    grid-template-columns:1fr
+  }
+
+}
+</style>
+</head>
+
+<body>
+
+<header class="site-header">
+
+  <a class="logo" href="#inicio">LUXOR</a>
+
+  <button
+    class="menu-toggle"
+    id="menuToggle"
+    aria-label="Abrir menu">
+    ☰
+  </button>
+
+  <nav id="mainNav">
+
+    <a href="#inicio">Início</a>
+
+    <a href="#colecao">Coleção</a>
+
+    <a href="#ofertas">Ofertas</a>
+
+    <a href="pagamento-retorno.html">
+      Conferir pedido
+    </a>
+
+  </nav>
+
+</header>
+
+<main>
+
+<section class="hero" id="inicio">
+
+  <div class="hero-content">
+
+    <span class="eyebrow">
+      LUXOR WATCHES • COLEÇÃO 2026
+    </span>
+
+    <h1>
+      Seu tempo.<br>
+      <span>Seu estilo.</span>
+    </h1>
+
+    <p>
+      Relógios sofisticados para quem procura presença,
+      elegância e personalidade em cada detalhe.
+    </p>
+
+    <div class="hero-actions">
+
+      <a href="#colecao" class="btn">
+        EXPLORAR COLEÇÃO
+      </a>
+
+      <a href="#ofertas" class="btn btn-outline">
+        VER OFERTAS
+      </a>
+
+    </div>
+
+  </div>
+
+  <div class="hero-visual">
+    <div class="watch-orbit">
+      ⌚
+    </div>
+  </div>
+
+</section>
+
+<section class="benefits">
+
+  <div>
+    <strong>✓</strong>
+    <span>
+      Compra segura<br>
+      <small>Ambiente protegido</small>
+    </span>
+  </div>
+
+  <div>
+    <strong>↗</strong>
+    <span>
+      Envio rápido<br>
+      <small>Acompanhe seu pedido</small>
+    </span>
+  </div>
+
+  <div>
+    <strong>◈</strong>
+    <span>
+      Atendimento<br>
+      <small>Suporte ao cliente</small>
+    </span>
+  </div>
+
+</section>
+
+<section class="catalog" id="colecao">
+
+  <div class="section-heading">
+
+    <div>
+
+      <span class="eyebrow">
+        ESCOLHA O SEU
+      </span>
+
+      <h2>
+        Nossa <span>coleção</span>
+      </h2>
+
+    </div>
+
+    <p></p>
+
+  </div>
+
+  <div id="listaProdutos" class="product-grid"></div>
+
+  <p id="semResultados" class="empty hidden">
+    Nenhum produto encontrado.
+  </p>
+
+</section>
+
+<section class="promo" id="ofertas">
+
+  <div>
+
+    <span class="eyebrow">
+      SELEÇÃO ESPECIAL
+    </span>
+
+    <h2>
+      Detalhes que<br>
+      <span>marcam presença.</span>
+    </h2>
+
+    <p>
+      Encontre seu próximo relógio LUXOR e leve
+      seu estilo para outro nível.
+    </p>
+
+    <a href="#colecao" class="btn">
+      COMPRAR AGORA
+    </a>
+
+  </div>
+
+  <div class="promo-mark">
+    LUXOR<br>
+    <small>WATCHES</small>
+  </div>
+
+</section>
+
+</main>
+
+<footer>
+
+  <div class="footer-brand">
+
+    <div class="logo">
+      LUXOR
+    </div>
+
+    <p>
+      Relógios para momentos que merecem ser lembrados.
+    </p>
+
+  </div>
+
+  <div>
+
+    <h4>Loja</h4>
+
+    <a href="#colecao">
+      Todos os relógios
+    </a>
+
+    <a href="#ofertas">
+      Ofertas
+    </a>
+
+  </div>
+
+  <div>
+
+    <h4>Conta</h4>
+
+    <a href="#colecao">
+      Entrar
+    </a>
+
+    <a href="#colecao">
+      Criar conta
+    </a>
+
+    <a href="#colecao">
+      Meus pedidos
+    </a>
+
+  </div>
+
+  <div>
+
+    <h4>Atendimento</h4>
+
+    <p>
+      Segunda a sexta
+    </p>
+
+    <p>
+      08:00 às 18:00
+    </p>
+
+  </div>
+
+</footer>
+
+<div class="copyright">
+  © 2026 LUXOR Watches. Todos os direitos reservados.
+</div>
+
+<script>
+
+const produtos = [
+
+  {
+    id:1,
+    produto_id:1,
+    nome:"Relógio Premium importado",
+    categoria:"AZUL",
+    preco:349.90,
+    estoque:20,
+    descricao:"Relógio sofisticado com acabamento dourado, design elegante e presença marcante. Ideal para ocasiões especiais e uso social.",
+    imagens:[
+      "azul.jpg",
+      "azul2.jpg",
+      "azul3.jpg",
+      "azul4.jpg"
+    ]
+  },
+
+  {
+    id:2,
+    produto_id:2,
+    nome:"Relógio Premium importado",
+    categoria:"PRETO",
+    preco:349.90,
+    estoque:20,
+    descricao:"Relógio premium com visual totalmente preto, linhas modernas e acabamento sofisticado. Uma peça marcante para quem busca estilo.",
+    imagens:[
+      "preto.jpg",
+      "preto2.jpg",
+      "preto3.jpg",
+      "preto4.jpg"
+    ]
+  },
+
+  {
+    id:3,
+    produto_id:3,
+    nome:"Relógio Premium importado",
+    categoria:"VERMELHO",
+    preco:349.90,
+    estoque:20,
+    descricao:"Modelo clássico com acabamento prateado e visual atemporal. Combina com diferentes estilos e ocasiões.",
+    imagens:[
+      "vermelho.jpg",
+      "vermelho2.jpg",
+      "vermelho3.jpg",
+      "vermelho4.jpg"
+    ]
+  },
+
+  {
+    id:4,
+    produto_id:4,
+    nome:"Relógio Premium importado",
+    categoria:"LARANJADO",
+    preco:349.90,
+    estoque:20,
+    descricao:"Relógio de luxo com acabamento dourado e design refinado. Desenvolvido para transmitir elegância e sofisticação.",
+    imagens:[
+      "laranja.jpg",
+      "laranja2.jpg",
+      "laranja3.jpg",
+      "laranja4.jpg"
+    ]
+  }
+
+];
+
+
+const lista = document.getElementById(
+  "listaProdutos"
+);
+
+const semResultados = document.getElementById(
+  "semResultados"
+);
+
+
+function formatarPreco(valor){
+
+  return valor.toLocaleString(
+    "pt-BR",
+    {
+      style:"currency",
+      currency:"BRL"
+    }
+  );
+
+}
+
+
+function mostrarProdutos(){
+
+  const resultado = [...produtos];
+
+  lista.innerHTML = "";
+
+  resultado.forEach(produto => {
+
+    const card = document.createElement(
+      "article"
+    );
+
+    card.className = "product-card";
+
+    card.innerHTML = `
+
+      <div class="product-image">
+
+        <div
+          class="carousel-track"
+          aria-label="Fotos de ${produto.nome}"
+        >
+
+          ${produto.imagens.map(
+            (img,i) => `
+
+              <div class="carousel-slide">
+
+                <img
+                  src="${img}"
+                  alt="${produto.nome} — foto ${i+1}"
+                  loading="lazy"
+                  draggable="false"
+                >
+
+              </div>
+
+            `
+          ).join("")}
+
+        </div>
+
+        <button
+          class="carousel-btn prev"
+          type="button"
+          aria-label="Foto anterior"
+        >
+          ‹
+        </button>
+
+        <button
+          class="carousel-btn next"
+          type="button"
+          aria-label="Próxima foto"
+        >
+          ›
+        </button>
+
+        <div class="carousel-dots">
+
+          ${produto.imagens.map(
+            (_,i) => `
+
+              <button
+                class="carousel-dot ${i===0?"active":""}"
+                type="button"
+                aria-label="Ir para foto ${i+1}"
+              ></button>
+
+            `
+          ).join("")}
+
+        </div>
+
+      </div>
+
+      <div class="product-content">
+
+        <span class="product-category">
+          ${produto.categoria.toUpperCase()}
+        </span>
+
+        <h3>
+          ${produto.nome}
+        </h3>
+
+        <p>
+          ${produto.descricao}
+        </p>
+
+        <strong>
+          ${formatarPreco(produto.preco)}
+        </strong>
+
+        <button
+          class="product-buy"
+          type="button"
+        >
+          COMPRAR
+        </button>
+
+      </div>
+
+    `;
+
+
+    const track = card.querySelector(
+      ".carousel-track"
+    );
+
+    const dots = [
+      ...card.querySelectorAll(
+        ".carousel-dot"
+      )
+    ];
+
+
+    track.addEventListener(
+      "wheel",
+      (e) => {
+
+        if (
+          Math.abs(e.deltaY) >
+          Math.abs(e.deltaX)
+        ){
+
+          e.preventDefault();
+
+          window.scrollBy({
+            top:e.deltaY,
+            left:0,
+            behavior:"auto"
+          });
+
+        }
+
+      },
+      {
+        passive:false
+      }
+    );
+
+
+    const irParaFoto = (i) => {
+
+      const indice = Math.max(
+        0,
+        Math.min(
+          i,
+          produto.imagens.length - 1
+        )
+      );
+
+      track.scrollTo({
+        left:
+          indice *
+          track.clientWidth,
+        behavior:"smooth"
+      });
+
+    };
+
+
+    card.querySelector(
+      ".carousel-btn.prev"
+    ).addEventListener(
+      "click",
+      () => {
+
+        const i = Math.round(
+          track.scrollLeft /
+          track.clientWidth
+        );
+
+        irParaFoto(i - 1);
+
+      }
+    );
+
+
+    card.querySelector(
+      ".carousel-btn.next"
+    ).addEventListener(
+      "click",
+      () => {
+
+        const i = Math.round(
+          track.scrollLeft /
+          track.clientWidth
+        );
+
+        irParaFoto(i + 1);
+
+      }
+    );
+
+
+    dots.forEach(
+      (dot,i) => {
+
+        dot.addEventListener(
+          "click",
+          () => irParaFoto(i)
+        );
+
+      }
+    );
+
+
+    track.addEventListener(
+      "scroll",
+      () => {
+
+        const i = Math.round(
+          track.scrollLeft /
+          track.clientWidth
+        );
+
+        dots.forEach(
+          (d,n) =>
+            d.classList.toggle(
+              "active",
+              n === i
+            )
+        );
+
+      },
+      {
+        passive:true
+      }
+    );
+
+
+    /*
+      BOTÃO COMPRAR
+
+      Ao clicar:
+      1. identifica o produto;
+      2. salva os dados;
+      3. encaminha para checkout.html.
+    */
+
+    card.querySelector(
+      ".product-buy"
+    ).addEventListener(
+      "click",
+      () => comprarProduto(produto.id)
+    );
+
+
+    lista.appendChild(card);
+
+  });
+
+
+  semResultados.classList.toggle(
+    "hidden",
+    resultado.length !== 0
+  );
+
+}
+
+
+/*
+  FUNÇÃO DE COMPRA
+
+  ALTERAÇÃO FEITA:
+  o cliente agora é encaminhado
+  diretamente para checkout.html.
+*/
+
+function comprarProduto(id){
+
+  const produto = produtos.find(
+    p => p.id === id
+  );
+
+  if(!produto){
+
+    alert("Produto não encontrado.");
+
+    return;
+
+  }
+
+
+  const produtoPedido = {
+
+    produto_id:
+      produto.produto_id,
+
+    produto_nome:
+      produto.nome,
+
+    valor:
+      Number(
+        produto.preco.toFixed(2)
+      ),
+
+    quantidade:1
+
+  };
+
+
+  /*
+    Guarda o produto selecionado
+    para o checkout.html poder
+    recuperar essas informações.
+  */
+
+  localStorage.setItem(
+    "produtoSelecionado",
+    JSON.stringify(produto)
+  );
+
+
+  localStorage.setItem(
+    "produtoPedido",
+    JSON.stringify(produtoPedido)
+  );
+
+
+  /*
+    Salva também no carrinho.
+  */
+
+  let carrinho = [];
+
+  try{
+
+    carrinho = JSON.parse(
+      localStorage.getItem(
+        "carrinho"
+      ) || "[]"
+    );
+
+    if(!Array.isArray(carrinho)){
+
+      carrinho = [];
+
+    }
+
+  }catch(e){
+
+    carrinho = [];
+
+  }
+
+
+  carrinho.push({
+    ...produtoPedido
+  });
+
+
+  localStorage.setItem(
+    "carrinho",
+    JSON.stringify(carrinho)
+  );
+
+
+  /*
+    ENCAMINHAMENTO PARA O CHECKOUT
+
+    O checkout.html precisa estar
+    na mesma pasta do index.html.
+  */
+
+  window.location.href =
+    "checkout.html";
+
+}
+
+
+const menuToggle =
+  document.getElementById(
+    "menuToggle"
+  );
+
+const mainNav =
+  document.getElementById(
+    "mainNav"
+  );
+
+
+if(
+  menuToggle &&
+  mainNav
+){
+
+  menuToggle.addEventListener(
+    "click",
+    () =>
+      mainNav.classList.toggle(
+        "open"
+      )
+  );
+
+}
+
+
+mostrarProdutos();
+
+</script>
+
+</body>
+</html>
