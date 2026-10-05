@@ -1,16 +1,14 @@
 {
-  "name": "luxor-server",
+  "name": "luxor-store",
   "version": "1.0.0",
-  "private": true,
+  "description": "LUXOR Watches",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "bcryptjs": "^3.0.2",
-    "cors": "^2.8.5",
-    "dotenv": "^17.2.2",
-    "express": "^5.1.0",
-    "mysql2": "^3.14.3"
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "mysql2": "^3.12.0"
   }
 }
