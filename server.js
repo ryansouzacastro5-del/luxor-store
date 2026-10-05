@@ -1,8 +1,5 @@
-require("dotenv").config();
-
 const express = require("express");
 const path = require("path");
-const mysql = require("mysql2/promise");
 
 const app = express();
 
@@ -12,28 +9,33 @@ const PORT = process.env.PORT || 10000;
 // CONFIGURAÇÕES
 // ======================================================
 
+const PUBLIC_URL =
+  process.env.PUBLIC_URL || "https://luxor-store-1.onrender.com";
+
+const PAGBANK_ENV =
+  (process.env.PAGBANK_ENV || "sandbox").toLowerCase();
+
 const PAGBANK_TOKEN = process.env.PAGBANK_TOKEN;
 
+// Ambiente PagBank
 const PAGBANK_API =
-  process.env.PAGBANK_ENV === "production"
+  PAGBANK_ENV === "production"
     ? "https://api.pagseguro.com"
     : "https://sandbox.api.pagseguro.com";
 
-const SITE_URL =
-  process.env.SITE_URL || "https://luxor-store-1.onrender.com";
-
 // ======================================================
-// MIDDLEWARE
+// MIDDLEWARES
 // ======================================================
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ======================================================
-// ARQUIVOS DO SITE
-// ======================================================
-
+// Arquivos HTML, imagens etc. que estão na raiz do projeto
 app.use(express.static(__dirname));
+
+// ======================================================
+// PÁGINAS
+// ======================================================
 
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
@@ -52,43 +54,7 @@ app.get("/pagamento-retorno.html", (req, res) => {
 });
 
 // ======================================================
-// CONEXÃO COM MARIADB / MYSQL
-// ======================================================
-
-let pool = null;
-
-function obterBanco() {
-  if (pool) return pool;
-
-  if (!process.env.DB_HOST) {
-    console.log("AVISO: DB_HOST não configurado.");
-    return null;
-  }
-
-  pool = mysql.createPool({
-    host: process.env.DB_HOST,
-    port: Number(process.env.DB_PORT || 3306),
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME || "lojadereilogio",
-
-    waitForConnections: true,
-    connectionLimit: 5,
-    queueLimit: 0,
-
-    ssl:
-      process.env.DB_SSL === "false"
-        ? undefined
-        : {
-            rejectUnauthorized: false
-          }
-  });
-
-  return pool;
-}
-
-// ======================================================
-// TESTE DA API
+// TESTE DO SERVIDOR
 // ======================================================
 
 app.get("/api", (req, res) => {
@@ -99,58 +65,70 @@ app.get("/api", (req, res) => {
 });
 
 // ======================================================
-// CRIAR PEDIDO
+// CRIAR PEDIDO + CHECKOUT PAGBANK
 // ======================================================
 
 app.post("/api/pedidos", async (req, res) => {
   try {
-    console.log("======================================");
-    console.log("NOVO PEDIDO RECEBIDO");
-    console.log("======================================");
+    // --------------------------------------------------
+    // Verifica token do PagBank
+    // --------------------------------------------------
+
+    if (!PAGBANK_TOKEN) {
+      return res.status(500).json({
+        ok: false,
+        error:
+          "PAGBANK_TOKEN não configurado no Render."
+      });
+    }
+
+    // --------------------------------------------------
+    // Dados recebidos do checkout.html
+    // --------------------------------------------------
 
     const { cliente, produto } = req.body;
 
+    if (!cliente) {
+      return res.status(400).json({
+        ok: false,
+        error: "Dados do cliente não foram enviados."
+      });
+    }
+
+    if (!produto) {
+      return res.status(400).json({
+        ok: false,
+        error: "Produto não foi enviado."
+      });
+    }
+
     // --------------------------------------------------
-    // VALIDAR DADOS
+    // Validação básica
     // --------------------------------------------------
 
-    if (!cliente || !produto) {
+    const nome = String(cliente.nome || "").trim();
+    const email = String(cliente.email || "").trim();
+
+    const produtoNome =
+      String(produto.nome || "Relógio Premium importado").trim();
+
+    const preco = Number(produto.preco);
+
+    if (!nome) {
       return res.status(400).json({
         ok: false,
-        error: "Dados do cliente ou produto não enviados."
+        error: "Informe o nome completo."
       });
     }
 
-    if (!cliente.nome || !cliente.email || !cliente.telefone) {
+    if (!email) {
       return res.status(400).json({
         ok: false,
-        error: "Preencha nome, e-mail e telefone."
+        error: "Informe o e-mail."
       });
     }
 
-    if (
-      !cliente.cep ||
-      !cliente.estado ||
-      !cliente.endereco ||
-      !cliente.numero ||
-      !cliente.cidade
-    ) {
-      return res.status(400).json({
-        ok: false,
-        error: "Preencha todos os dados obrigatórios do endereço."
-      });
-    }
-
-    if (!produto.nome || !produto.preco) {
-      return res.status(400).json({
-        ok: false,
-        error: "Produto inválido."
-      });
-    }
-
-    const valor = Number(produto.preco);
-
-    if (!Number.isFinite(valor) || valor <= 0) {
+    if (!Number.isFinite(preco) || preco <= 0) {
       return res.status(400).json({
         ok: false,
         error: "Valor do produto inválido."
@@ -158,129 +136,76 @@ app.post("/api/pedidos", async (req, res) => {
     }
 
     // --------------------------------------------------
-    // CRIAR REFERÊNCIA
+    // ID único do pedido
     // --------------------------------------------------
 
-    const referencia =
+    const pedidoId =
       "LUXOR-" +
       Date.now() +
       "-" +
-      Math.floor(Math.random() * 10000);
+      Math.floor(Math.random() * 1000);
+
+    // PagBank trabalha com centavos
+    const valorCentavos = Math.round(preco * 100);
 
     // --------------------------------------------------
-    // SALVAR PEDIDO NO BANCO
+    // Cliente
     // --------------------------------------------------
 
-    let pedidoId = null;
+    const telefone =
+      String(cliente.telefone || "").replace(/\D/g, "");
 
-    const banco = obterBanco();
+    const cpf =
+      String(cliente.cpf || "").replace(/\D/g, "");
 
-    if (banco) {
-      const [resultado] = await banco.execute(
-        `
-        INSERT INTO pedidos
-        (
-          produto_nome,
-          valor,
-          nome,
-          email,
-          telefone,
-          cpf,
-          cep,
-          endereco,
-          numero,
-          complemento,
-          cidade,
-          estado,
-          status,
-          payment_status,
-          pagbank_checkout_id
-        )
-        VALUES
-        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-         'aguardando_pagamento',
-         'pending',
-         NULL)
-        `,
-        [
-          produto.nome,
-          valor.toFixed(2),
-          cliente.nome,
-          cliente.email,
-          cliente.telefone,
-          cliente.cpf || null,
-          cliente.cep,
-          cliente.endereco,
-          cliente.numero,
-          cliente.complemento || null,
-          cliente.cidade,
-          cliente.estado
-        ]
-      );
+    let customer = {
+      name: nome,
+      email: email
+    };
 
-      pedidoId = resultado.insertId;
+    // CPF somente se tiver tamanho válido
+    if (cpf.length === 11 || cpf.length === 14) {
+      customer.tax_id = cpf;
+    }
 
-      console.log("Pedido salvo no banco:", pedidoId);
-    } else {
-      console.log(
-        "DB_HOST não configurado. Pedido não foi salvo no banco."
-      );
+    // Telefone brasileiro
+    if (telefone.length >= 10) {
+      let numeroTelefone = telefone;
+
+      // Remove 55 caso o cliente tenha digitado o código do país
+      if (numeroTelefone.startsWith("55")) {
+        numeroTelefone = numeroTelefone.substring(2);
+      }
+
+      const area = numeroTelefone.substring(0, 2);
+      const numero = numeroTelefone.substring(2);
+
+      if (area && numero) {
+        customer.phone = {
+          country: "55",
+          area: area,
+          number: numero
+        };
+      }
     }
 
     // --------------------------------------------------
-    // VERIFICAR TOKEN PAGBANK
+    // Checkout PagBank
     // --------------------------------------------------
 
-    if (!PAGBANK_TOKEN) {
-      return res.status(500).json({
-        ok: false,
-        error:
-          "PAGBANK_TOKEN não configurado no Render. O pedido foi recebido, mas o pagamento não pôde ser criado."
-      });
-    }
-
-    // --------------------------------------------------
-    // VALOR EM CENTAVOS
-    // R$ 349,90 = 34990
-    // --------------------------------------------------
-
-    const valorCentavos = Math.round(valor * 100);
-
-    // --------------------------------------------------
-    // CRIAR CHECKOUT PAGBANK
-    // --------------------------------------------------
-
-    const payload = {
-      reference_id: referencia,
-
-      customer_modifiable: true,
-
-      customer: {
-        name: cliente.nome,
-        email: cliente.email,
-        tax_id: cliente.cpf
-          ? cliente.cpf.replace(/\D/g, "")
-          : undefined,
-        phone: {
-          country: "+55",
-          area:
-            cliente.telefone
-              .replace(/\D/g, "")
-              .slice(0, 2) || "00",
-          number:
-            cliente.telefone
-              .replace(/\D/g, "")
-              .slice(-9) || "000000000"
-        }
-      },
+    const checkoutBody = {
+      reference_id: pedidoId,
 
       items: [
         {
           reference_id: String(
-            produto.id || produto.produto_id || "1"
+            produto.id || "1"
           ),
-          name: produto.nome,
+
+          name: produtoNome,
+
           quantity: 1,
+
           unit_amount: valorCentavos
         }
       ],
@@ -297,208 +222,310 @@ app.post("/api/pedidos", async (req, res) => {
         }
       ],
 
+      customer: customer,
+
+      customer_modifiable: true,
+
       redirect_url:
-        SITE_URL + "/pagamento-retorno.html",
+        PUBLIC_URL + "/pagamento-retorno.html",
 
       return_url:
-        SITE_URL + "/index.html",
+        PUBLIC_URL + "/index.html",
 
       notification_urls: [
-        SITE_URL + "/api/pagbank/notificacao"
+        PUBLIC_URL + "/api/pagbank/webhook"
       ],
 
       payment_notification_urls: [
-        SITE_URL + "/api/pagbank/notificacao"
+        PUBLIC_URL + "/api/pagbank/webhook"
       ]
     };
 
     console.log("Criando checkout PagBank...");
+    console.log("Pedido:", pedidoId);
+    console.log("Produto:", produtoNome);
+    console.log("Valor:", preco);
+    console.log("Ambiente:", PAGBANK_ENV);
 
-    const respostaPagBank = await fetch(
+    // --------------------------------------------------
+    // Chamada para o PagBank
+    // --------------------------------------------------
+
+    const pagbankResponse = await fetch(
       PAGBANK_API + "/checkouts",
       {
         method: "POST",
 
         headers: {
-          Authorization: `Bearer ${PAGBANK_TOKEN}`,
-          "Content-Type": "application/json",
-          Accept: "application/json"
+          "Authorization":
+            "Bearer " + PAGBANK_TOKEN,
+
+          "Content-Type":
+            "application/json",
+
+          "Accept":
+            "application/json"
         },
 
-        body: JSON.stringify(payload)
+        body: JSON.stringify(checkoutBody)
       }
     );
 
-    const textoPagBank = await respostaPagBank.text();
+    // --------------------------------------------------
+    // Lê resposta com segurança
+    // --------------------------------------------------
 
-    let dadosPagBank;
+    const respostaTexto =
+      await pagbankResponse.text();
+
+    let pagbankData;
 
     try {
-      dadosPagBank = JSON.parse(textoPagBank);
+      pagbankData =
+        JSON.parse(respostaTexto);
     } catch (erro) {
       console.error(
-        "Resposta inválida do PagBank:",
-        textoPagBank
-      );
-
-      return res.status(502).json({
-        ok: false,
-        error: "O PagBank retornou uma resposta inválida."
-      });
-    }
-
-    if (!respostaPagBank.ok) {
-      console.error(
-        "ERRO PAGBANK:",
-        JSON.stringify(dadosPagBank, null, 2)
+        "Resposta não-JSON do PagBank:",
+        respostaTexto
       );
 
       return res.status(502).json({
         ok: false,
         error:
-          dadosPagBank?.error_messages?.[0]?.description ||
-          "Não foi possível criar o checkout PagBank."
+          "O PagBank retornou uma resposta inválida.",
+        detalhes:
+          respostaTexto.substring(0, 500)
       });
     }
 
     // --------------------------------------------------
-    // PEGAR ID DO CHECKOUT
+    // Erro retornado pelo PagBank
     // --------------------------------------------------
 
-    const pagbankCheckoutId = dadosPagBank.id || null;
+    if (!pagbankResponse.ok) {
+      console.error(
+        "Erro PagBank:",
+        JSON.stringify(
+          pagbankData,
+          null,
+          2
+        )
+      );
+
+      return res.status(
+        pagbankResponse.status
+      ).json({
+        ok: false,
+        error:
+          "O PagBank recusou a criação do checkout.",
+        detalhes: pagbankData
+      });
+    }
 
     // --------------------------------------------------
-    // PEGAR LINK DE PAGAMENTO
+    // ID do checkout
     // --------------------------------------------------
 
-    const linkPagamento =
-      Array.isArray(dadosPagBank.links)
-        ? dadosPagBank.links.find(
-            link => link.rel === "PAY"
-          )
-        : null;
+    const pagbankCheckoutId =
+      pagbankData.id || null;
 
-    const payLink = linkPagamento?.href || null;
+    // --------------------------------------------------
+    // Encontrar link PAY
+    // --------------------------------------------------
+
+    let payLink = null;
+
+    if (
+      Array.isArray(
+        pagbankData.links
+      )
+    ) {
+      const pay = pagbankData.links.find(
+        link =>
+          link.rel === "PAY"
+      );
+
+      if (pay) {
+        payLink = pay.href;
+      }
+    }
+
+    // Algumas respostas podem usar outro formato
+    if (
+      !payLink &&
+      pagbankData.links &&
+      pagbankData.links.PAY
+    ) {
+      payLink =
+        pagbankData.links.PAY;
+    }
+
+    // --------------------------------------------------
+    // Verifica se recebeu link
+    // --------------------------------------------------
 
     if (!payLink) {
       console.error(
-        "PagBank não retornou link PAY:",
-        JSON.stringify(dadosPagBank, null, 2)
+        "Checkout criado, mas link PAY não encontrado:",
+        JSON.stringify(
+          pagbankData,
+          null,
+          2
+        )
       );
 
       return res.status(502).json({
         ok: false,
         error:
-          "O PagBank criou o checkout, mas não retornou o link de pagamento."
+          "O PagBank criou o checkout, mas não retornou o link de pagamento.",
+        pagbankCheckoutId:
+          pagbankCheckoutId
       });
     }
 
     // --------------------------------------------------
-    // ATUALIZAR ID PAGBANK NO BANCO
+    // Resposta para checkout.html
     // --------------------------------------------------
 
-    if (banco && pedidoId) {
-      await banco.execute(
-        `
-        UPDATE pedidos
-        SET pagbank_checkout_id = ?
-        WHERE id = ?
-        `,
-        [pagbankCheckoutId, pedidoId]
-      );
-    }
+    console.log(
+      "Checkout PagBank criado com sucesso."
+    );
 
-    console.log("Checkout PagBank criado.");
-    console.log("ID:", pagbankCheckoutId);
-    console.log("Link:", payLink);
+    console.log(
+      "Checkout ID:",
+      pagbankCheckoutId
+    );
 
-    // --------------------------------------------------
-    // RESPONDER AO CHECKOUT.HTML
-    // --------------------------------------------------
+    console.log(
+      "Link de pagamento:",
+      payLink
+    );
 
-    return res.status(201).json({
+    return res.json({
       ok: true,
-      pedidoId: pedidoId,
-      pagbankCheckoutId: pagbankCheckoutId,
-      payLink: payLink
+
+      pedidoId:
+        pedidoId,
+
+      pagbankCheckoutId:
+        pagbankCheckoutId,
+
+      payLink:
+        payLink
     });
-  } catch (erro) {
-    console.error("ERRO AO CRIAR PEDIDO:");
-    console.error(erro);
+
+  } catch (error) {
+    console.error(
+      "Erro interno em /api/pedidos:",
+      error
+    );
 
     return res.status(500).json({
       ok: false,
       error:
-        erro.message ||
+        error.message ||
         "Erro interno ao criar o pedido."
     });
   }
 });
 
 // ======================================================
-// NOTIFICAÇÃO DO PAGBANK
+// WEBHOOK PAGBANK
 // ======================================================
 
-app.post("/api/pagbank/notificacao", async (req, res) => {
-  try {
-    console.log("======================================");
-    console.log("NOTIFICAÇÃO PAGBANK");
-    console.log("======================================");
+app.post(
+  "/api/pagbank/webhook",
+  (req, res) => {
 
     console.log(
-      JSON.stringify(req.body, null, 2)
+      "Notificação recebida do PagBank:"
     );
 
-    /*
-      O PagBank pode enviar notificações de alteração
-      de status do checkout/pagamento.
+    console.log(
+      JSON.stringify(
+        req.body,
+        null,
+        2
+      )
+    );
 
-      O processamento detalhado pode ser adicionado
-      posteriormente para atualizar payment_status
-      no banco.
-    */
+    // Por enquanto apenas confirma recebimento.
+    // Depois podemos atualizar o status do pedido
+    // no MariaDB automaticamente.
 
     return res.status(200).json({
       ok: true
     });
-  } catch (erro) {
+  }
+);
+
+// ======================================================
+// ERROS DE API
+// ======================================================
+
+app.use(
+  (req, res, next) => {
+
+    if (
+      req.path.startsWith("/api/")
+    ) {
+      return res.status(404).json({
+        ok: false,
+        error:
+          "Rota da API não encontrada."
+      });
+    }
+
+    next();
+  }
+);
+
+// ======================================================
+// ERRO GERAL
+// ======================================================
+
+app.use(
+  (err, req, res, next) => {
+
     console.error(
-      "Erro na notificação PagBank:",
-      erro
+      "Erro geral:",
+      err
     );
 
-    return res.status(500).json({
-      ok: false
-    });
+    if (
+      req.path.startsWith("/api/")
+    ) {
+      return res.status(500).json({
+        ok: false,
+        error:
+          "Erro interno do servidor."
+      });
+    }
+
+    res.status(500).send(
+      "Erro interno do servidor."
+    );
   }
-});
-
-// ======================================================
-// TRATAMENTO DE ERROS
-// ======================================================
-
-app.use((err, req, res, next) => {
-  console.error("ERRO EXPRESS:", err);
-
-  if (req.path.startsWith("/api/")) {
-    return res.status(500).json({
-      ok: false,
-      error: "Erro interno do servidor."
-    });
-  }
-
-  res.status(500).send("Erro interno do servidor.");
-});
+);
 
 // ======================================================
 // INICIAR SERVIDOR
 // ======================================================
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log("======================================");
-  console.log("SERVIDOR LUXOR FUNCIONANDO");
-  console.log("PORTA:", PORT);
-  console.log("PAGBANK:", PAGBANK_API);
-  console.log("SITE:", SITE_URL);
-  console.log("======================================");
-});
+app.listen(
+  PORT,
+  "0.0.0.0",
+  () => {
+    console.log(
+      `Servidor LUXOR funcionando na porta ${PORT}`
+    );
+
+    console.log(
+      `PagBank: ${PAGBANK_ENV}`
+    );
+
+    console.log(
+      `URL pública: ${PUBLIC_URL}`
+    );
+  }
+);
