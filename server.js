@@ -97,7 +97,9 @@ app.get("/api", async (req, res) => {
     connection.release();
 
     banco = true;
+
   } catch (error) {
+
     console.error(
       "Erro no banco:",
       error.message
@@ -118,6 +120,7 @@ app.get("/api", async (req, res) => {
 
 app.get("/api/banco", async (req, res) => {
   try {
+
     const [rows] =
       await pool.query(
         "SELECT 1 AS conectado"
@@ -129,6 +132,7 @@ app.get("/api/banco", async (req, res) => {
     });
 
   } catch (error) {
+
     console.error(
       "Erro no banco:",
       error
@@ -147,6 +151,7 @@ app.get("/api/banco", async (req, res) => {
 
 app.get("/api/produtos", async (req, res) => {
   try {
+
     const [rows] =
       await pool.query(`
         SELECT
@@ -163,6 +168,7 @@ app.get("/api/produtos", async (req, res) => {
     res.json(rows);
 
   } catch (error) {
+
     console.error(
       "Erro ao buscar produtos:",
       error
@@ -181,12 +187,16 @@ app.get("/api/produtos", async (req, res) => {
 // ==========================================
 
 app.post("/api/pedidos", async (req, res) => {
+
   try {
 
-    const { cliente, produto } =
-      req.body;
+    const {
+      cliente,
+      produto
+    } = req.body;
 
     if (!cliente) {
+
       return res.status(400).json({
         ok: false,
         error:
@@ -195,12 +205,17 @@ app.post("/api/pedidos", async (req, res) => {
     }
 
     if (!produto) {
+
       return res.status(400).json({
         ok: false,
         error:
           "Produto não informado."
       });
     }
+
+    // ======================================
+    // DADOS DO CLIENTE
+    // ======================================
 
     const nome =
       String(
@@ -252,6 +267,10 @@ app.post("/api/pedidos", async (req, res) => {
         cliente.estado || ""
       ).trim();
 
+    // ======================================
+    // DADOS DO PRODUTO
+    // ======================================
+
     const produtoId =
       Number(
         produto.id || 0
@@ -269,6 +288,7 @@ app.post("/api/pedidos", async (req, res) => {
       );
 
     if (!nome || !email) {
+
       return res.status(400).json({
         ok: false,
         error:
@@ -280,12 +300,17 @@ app.post("/api/pedidos", async (req, res) => {
       !Number.isFinite(preco) ||
       preco <= 0
     ) {
+
       return res.status(400).json({
         ok: false,
         error:
           "Valor do produto inválido."
       });
     }
+
+    // ======================================
+    // REFERÊNCIA DO PEDIDO
+    // ======================================
 
     const referencia =
       "LUXOR-" +
@@ -295,70 +320,91 @@ app.post("/api/pedidos", async (req, res) => {
         Math.random() * 10000
       );
 
+    // ======================================
+    // SALVAR PEDIDO NO BANCO
+    // ======================================
+
     const [resultado] =
-      await pool.query(`
+      await pool.query(
+        `
         INSERT INTO pedidos
         (
           produto_id,
           produto_nome,
           quantidade,
           valor,
+
           nome,
           email,
           telefone,
           cpf,
+
           cep,
           endereco,
           numero,
           complemento,
           cidade,
           estado,
+
           status,
           payment_status,
           pagbank_reference_id
         )
+
         VALUES
         (
           ?,
           ?,
           1,
           ?,
+
+          ?,
+          ?,
+          ?,
+          ?,
+
           ?,
           ?,
           ?,
           ?,
           ?,
           ?,
-          ?,
-          ?,
-          ?,
-          ?,
+
           'AGUARDANDO_PAGAMENTO',
           'PENDING',
           ?
         )
-      `,
-      [
-        produtoId,
-        produtoNome,
-        preco,
-        nome,
-        email,
-        telefone,
-        cpf,
-        cep,
-        endereco,
-        numero,
-        complemento,
-        cidade,
-        estado,
-        referencia
-      ]);
+        `,
+        [
+          produtoId,
+          produtoNome,
+          preco,
+
+          nome,
+          email,
+          telefone,
+          cpf,
+
+          cep,
+          endereco,
+          numero,
+          complemento,
+          cidade,
+          estado,
+
+          referencia
+        ]
+      );
 
     const pedidoId =
       resultado.insertId;
 
+    // ======================================
+    // VERIFICAR TOKEN PAGBANK
+    // ======================================
+
     if (!PAGBANK_TOKEN) {
+
       return res.status(500).json({
         ok: false,
         error:
@@ -366,10 +412,18 @@ app.post("/api/pedidos", async (req, res) => {
       });
     }
 
+    // ======================================
+    // VALOR EM CENTAVOS
+    // ======================================
+
     const valorCentavos =
       Math.round(
         preco * 100
       );
+
+    // ======================================
+    // CLIENTE PAGBANK
+    // ======================================
 
     const customer = {
       name: nome,
@@ -380,6 +434,10 @@ app.post("/api/pedidos", async (req, res) => {
           ""
         )
     };
+
+    // ======================================
+    // CHECKOUT PAGBANK
+    // ======================================
 
     const checkoutPayload = {
 
@@ -401,7 +459,8 @@ app.post("/api/pedidos", async (req, res) => {
           name:
             produtoNome,
 
-          quantity: 1,
+          quantity:
+            1,
 
           unit_amount:
             valorCentavos
@@ -413,10 +472,12 @@ app.post("/api/pedidos", async (req, res) => {
           type:
             "CREDIT_CARD"
         },
+
         {
           type:
             "PIX"
         },
+
         {
           type:
             "BOLETO"
@@ -441,6 +502,10 @@ app.post("/api/pedidos", async (req, res) => {
       "Criando checkout PagBank:",
       referencia
     );
+
+    // ======================================
+    // CHAMADA PAGBANK
+    // ======================================
 
     const respostaPagBank =
       await fetch(
@@ -471,6 +536,10 @@ app.post("/api/pedidos", async (req, res) => {
     const dadosPagBank =
       await respostaPagBank.json();
 
+    // ======================================
+    // ERRO PAGBANK
+    // ======================================
+
     if (
       !respostaPagBank.ok
     ) {
@@ -484,10 +553,15 @@ app.post("/api/pedidos", async (req, res) => {
         ok: false,
         error:
           "Erro ao criar pagamento no PagBank.",
+
         detalhe:
           dadosPagBank
       });
     }
+
+    // ======================================
+    // ENCONTRAR LINK DE PAGAMENTO
+    // ======================================
 
     let payLink = null;
 
@@ -511,32 +585,52 @@ app.post("/api/pedidos", async (req, res) => {
     }
 
     if (!payLink) {
+
       payLink =
         dadosPagBank.payment_link ||
         dadosPagBank.pay_link ||
         null;
     }
 
+    // ======================================
+    // ID DO CHECKOUT
+    // ======================================
+
     const pagbankCheckoutId =
       dadosPagBank.id ||
       null;
 
-    await pool.query(`
+    // ======================================
+    // ATUALIZAR PEDIDO
+    // ======================================
+
+    await pool.query(
+      `
       UPDATE pedidos
+
       SET
         pagbank_checkout_id = ?,
         payment_status = 'PENDING'
+
       WHERE id = ?
-    `,
-    [
-      pagbankCheckoutId,
-      pedidoId
-    ]);
+      `,
+      [
+        pagbankCheckoutId,
+        pedidoId
+      ]
+    );
+
+    // ======================================
+    // RESPOSTA
+    // ======================================
 
     res.json({
       ok: true,
+
       pedidoId,
+
       pagbankCheckoutId,
+
       payLink
     });
 
@@ -551,7 +645,7 @@ app.post("/api/pedidos", async (req, res) => {
       ok: false,
       error:
         error.message ||
-        "Erro interno ao criar pedido."
+        "Erro interno do servidor."
     });
   }
 });
@@ -580,6 +674,10 @@ app.get(
           ""
         );
 
+      // ====================================
+      // VALIDAR DADOS
+      // ====================================
+
       if (!nome || !cpf) {
 
         return res.status(400).json({
@@ -598,19 +696,42 @@ app.get(
         });
       }
 
+      // ====================================
+      // BUSCAR PEDIDO
+      // ====================================
+
       const [rows] =
-        await pool.query(`
+        await pool.query(
+          `
           SELECT
+
             id,
+
             criado_em,
+
             nome,
+            email,
+            telefone,
+            cpf,
+
+            cep,
+            endereco,
+            numero,
+            complemento,
+            cidade,
+            estado,
+
             produto_nome,
             quantidade,
             valor,
+
             status,
             payment_status
+
           FROM pedidos
+
           WHERE
+
             REPLACE(
               REPLACE(
                 REPLACE(
@@ -624,19 +745,27 @@ app.get(
               ' ',
               ''
             ) = ?
+
             AND LOWER(
               TRIM(nome)
-            ) =
+            )
+            =
             LOWER(
               TRIM(?)
             )
+
           ORDER BY
             criado_em DESC
-        `,
-        [
-          cpf,
-          nome
-        ]);
+          `,
+          [
+            cpf,
+            nome
+          ]
+        );
+
+      // ====================================
+      // NENHUM PEDIDO
+      // ====================================
 
       if (!rows.length) {
 
@@ -647,9 +776,14 @@ app.get(
         });
       }
 
+      // ====================================
+      // FORMATAR PEDIDOS
+      // ====================================
+
       const pedidos =
         rows.map(
           pedido => ({
+
             id:
               pedido.id,
 
@@ -658,6 +792,33 @@ app.get(
 
             nome:
               pedido.nome,
+
+            email:
+              pedido.email,
+
+            telefone:
+              pedido.telefone,
+
+            cpf:
+              pedido.cpf,
+
+            cep:
+              pedido.cep,
+
+            endereco:
+              pedido.endereco,
+
+            numero:
+              pedido.numero,
+
+            complemento:
+              pedido.complemento,
+
+            cidade:
+              pedido.cidade,
+
+            estado:
+              pedido.estado,
 
             produto_nome:
               pedido.produto_nome,
@@ -679,6 +840,10 @@ app.get(
               pedido.payment_status
           })
         );
+
+      // ====================================
+      // RETORNO
+      // ====================================
 
       res.json({
         ok: true,
@@ -712,8 +877,10 @@ app.get(
     try {
 
       const [rows] =
-        await pool.query(`
+        await pool.query(
+          `
           SELECT
+
             COUNT(*) AS quantidade,
 
             COALESCE(
@@ -731,8 +898,8 @@ app.get(
           FROM pedidos
 
           WHERE
-            payment_status =
-              'PAID'
+
+            payment_status = 'PAID'
 
             OR status IN (
               'PAGO',
@@ -740,7 +907,8 @@ app.get(
               'APROVADO',
               'APPROVED'
             )
-        `);
+          `
+        );
 
       res.json({
 
@@ -797,22 +965,40 @@ app.get(
 
       let sql = `
         SELECT
+
           id,
           criado_em,
+
           nome,
           email,
+          telefone,
           cpf,
+
+          cep,
+          endereco,
+          numero,
+          complemento,
+          cidade,
+          estado,
+
+          produto_id,
           produto_nome,
           quantidade,
           valor,
+
           status,
           payment_status,
-          pagbank_checkout_id
+
+          pagbank_checkout_id,
+          pagbank_reference_id,
+          pagbank_payment_id
+
         FROM pedidos
 
         WHERE
           (
             payment_status = 'PAID'
+
             OR status IN (
               'PAGO',
               'PAID',
@@ -824,10 +1010,15 @@ app.get(
 
       const valores = [];
 
+      // ====================================
+      // BUSCA
+      // ====================================
+
       if (q) {
 
         sql += `
           AND (
+
             CAST(id AS CHAR)
               LIKE ?
 
@@ -846,7 +1037,9 @@ app.get(
         `;
 
         const busca =
-          "%" + q + "%";
+          "%" +
+          q +
+          "%";
 
         valores.push(
           busca,
@@ -856,6 +1049,10 @@ app.get(
           busca
         );
       }
+
+      // ====================================
+      // DATA INICIAL
+      // ====================================
 
       if (inicio) {
 
@@ -868,6 +1065,10 @@ app.get(
           " 00:00:00"
         );
       }
+
+      // ====================================
+      // DATA FINAL
+      // ====================================
 
       if (fim) {
 
@@ -926,7 +1127,8 @@ app.get(
         );
 
       if (
-        !Number.isInteger(id)
+        !Number.isInteger(id) ||
+        id <= 0
       ) {
 
         return res.status(400).json({
@@ -944,7 +1146,9 @@ app.get(
           WHERE id = ?
           LIMIT 1
           `,
-          [id]
+          [
+            id
+          ]
         );
 
       if (!rows.length) {
@@ -956,9 +1160,10 @@ app.get(
         });
       }
 
-      res.json(
-        rows[0]
-      );
+      res.json({
+        ok: true,
+        pedido: rows[0]
+      });
 
     } catch (error) {
 
@@ -1010,10 +1215,19 @@ app.post(
         body.status ||
         null;
 
+      // ====================================
+      // ATUALIZAR PEDIDO
+      // ====================================
+
       if (
         referenceId &&
         status
       ) {
+
+        const statusNormalizado =
+          String(
+            status
+          ).toUpperCase();
 
         let paymentStatus =
           "PENDING";
@@ -1021,9 +1235,19 @@ app.post(
         let pedidoStatus =
           "AGUARDANDO_PAGAMENTO";
 
+        // ==================================
+        // PAGO
+        // ==================================
+
         if (
-          status === "PAID" ||
-          status === "APPROVED"
+          statusNormalizado ===
+            "PAID" ||
+
+          statusNormalizado ===
+            "APPROVED" ||
+
+          statusNormalizado ===
+            "AUTHORIZED"
         ) {
 
           paymentStatus =
@@ -1033,9 +1257,16 @@ app.post(
             "PAGO";
         }
 
+        // ==================================
+        // CANCELADO
+        // ==================================
+
         if (
-          status === "CANCELED" ||
-          status === "CANCELLED"
+          statusNormalizado ===
+            "CANCELED" ||
+
+          statusNormalizado ===
+            "CANCELLED"
         ) {
 
           paymentStatus =
@@ -1045,21 +1276,50 @@ app.post(
             "CANCELADO";
         }
 
-        await pool.query(`
+        // ==================================
+        // FALHOU
+        // ==================================
+
+        if (
+          statusNormalizado ===
+            "DECLINED" ||
+
+          statusNormalizado ===
+            "FAILED"
+        ) {
+
+          paymentStatus =
+            "FAILED";
+
+          pedidoStatus =
+            "FALHOU";
+        }
+
+        await pool.query(
+          `
           UPDATE pedidos
 
           SET
+
             payment_status = ?,
+
             status = ?
 
           WHERE
             pagbank_reference_id = ?
-        `,
-        [
-          paymentStatus,
-          pedidoStatus,
-          referenceId
-        ]);
+          `,
+          [
+            paymentStatus,
+            pedidoStatus,
+            referenceId
+          ]
+        );
+
+        console.log(
+          "Pedido atualizado:",
+          referenceId,
+          paymentStatus
+        );
       }
 
       res.status(200).json({
@@ -1092,6 +1352,7 @@ app.use(
     ) {
 
       return res.status(404).json({
+
         ok: false,
 
         error:
