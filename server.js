@@ -1,6 +1,7 @@
 const express = require("express");
 const path = require("path");
 const mysql = require("mysql2/promise");
+
 require("dotenv").config();
 
 const app = express();
@@ -12,20 +13,19 @@ const PUBLIC_URL =
   "https://luxor-store-1.onrender.com";
 
 const PAGBANK_ENV =
-  (process.env.PAGBANK_ENV || "sandbox").toLowerCase();
+  process.env.PAGBANK_ENV || "sandbox";
 
 const PAGBANK_TOKEN =
-  process.env.PAGBANK_TOKEN;
+  process.env.PAGBANK_TOKEN || "";
 
 const PAGBANK_API =
   PAGBANK_ENV === "production"
     ? "https://api.pagseguro.com"
     : "https://sandbox.api.pagseguro.com";
 
-
-/* =========================================================
-   BANCO DE DADOS
-========================================================= */
+// ======================================================
+// BANCO DE DADOS
+// ======================================================
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
@@ -46,37 +46,34 @@ const pool = mysql.createPool({
         }
 });
 
-
-/* =========================================================
-   MIDDLEWARE
-========================================================= */
+// ======================================================
+// MIDDLEWARE
+// ======================================================
 
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+
+app.use(
+  express.urlencoded({
+    extended: true
+  })
+);
 
 app.use(express.static(__dirname));
 
-
-/* =========================================================
-   PÁGINAS
-========================================================= */
+// ======================================================
+// PÁGINAS
+// ======================================================
 
 app.get("/", (req, res) => {
-  res.sendFile(
-    path.join(__dirname, "index.html")
-  );
+  res.sendFile(path.join(__dirname, "index.html"));
 });
 
 app.get("/checkout.html", (req, res) => {
-  res.sendFile(
-    path.join(__dirname, "checkout.html")
-  );
+  res.sendFile(path.join(__dirname, "checkout.html"));
 });
 
 app.get("/admin.html", (req, res) => {
-  res.sendFile(
-    path.join(__dirname, "admin.html")
-  );
+  res.sendFile(path.join(__dirname, "admin.html"));
 });
 
 app.get("/pagamento-retorno.html", (req, res) => {
@@ -85,776 +82,694 @@ app.get("/pagamento-retorno.html", (req, res) => {
   );
 });
 
+// Também permite:
 
-/* =========================================================
-   TESTE DA API
-========================================================= */
+// /painel/admin
+app.get("/painel/admin", (req, res) => {
+  res.sendFile(path.join(__dirname, "admin.html"));
+});
+
+// ======================================================
+// TESTE DA API
+// ======================================================
 
 app.get("/api", async (req, res) => {
-
   let banco = false;
 
   try {
+    const connection = await pool.getConnection();
 
-    await pool.query("SELECT 1");
+    await connection.query("SELECT 1");
+
+    connection.release();
 
     banco = true;
-
   } catch (error) {
-
-    console.error(
-      "Erro ao testar banco:",
-      error.message
-    );
-
+    console.error("Erro no banco:", error.message);
   }
 
   res.json({
     ok: true,
     servidor: "LUXOR",
-    banco: banco,
+    banco,
     pagbank: PAGBANK_ENV
   });
-
 });
 
-
-/* =========================================================
-   TESTE DO BANCO
-========================================================= */
+// ======================================================
+// TESTE DO BANCO
+// ======================================================
 
 app.get("/api/banco", async (req, res) => {
-
   try {
-
-    const [rows] =
-      await pool.query(
-        "SELECT NOW() AS data"
-      );
-
-    res.json({
-
-      ok: true,
-
-      banco: "conectado",
-
-      data:
-        rows[0].data
-
-    });
-
-  } catch (error) {
-
-    console.error(
-      "Erro MariaDB:",
-      error
+    const [rows] = await pool.query(
+      "SELECT 1 AS conectado"
     );
 
-    res.status(500).json({
-
-      ok: false,
-
-      error:
-        "Não foi possível conectar ao MariaDB.",
-
-      detalhes:
-        error.message
-
+    res.json({
+      ok: true,
+      banco: rows[0]
     });
+  } catch (error) {
+    console.error("Erro no banco:", error);
 
+    res.status(500).json({
+      ok: false,
+      error: error.message
+    });
   }
-
 });
 
-
-/* =========================================================
-   PRODUTOS
-========================================================= */
+// ======================================================
+// PRODUTOS
+// ======================================================
 
 app.get("/api/produtos", async (req, res) => {
-
   try {
+    const [rows] = await pool.query(`
+      SELECT
+        id,
+        nome,
+        descricao,
+        preco,
+        estoque,
+        imagem
+      FROM produtos
+      ORDER BY id ASC
+    `);
 
-    const [produtos] =
-      await pool.query(`
-        SELECT
-          id,
-          nome,
-          descricao,
-          preco,
-          estoque,
-          imagem
-        FROM produtos
-        ORDER BY id ASC
-      `);
+    res.json(rows);
+  } catch (error) {
+    console.error("Erro ao buscar produtos:", error);
+
+    res.status(500).json({
+      ok: false,
+      error: "Erro ao buscar produtos."
+    });
+  }
+});
+
+// ======================================================
+// CRIAR PEDIDO + PAGBANK
+// ======================================================
+
+app.post("/api/pedidos", async (req, res) => {
+  try {
+    const { cliente, produto } = req.body;
+
+    if (!cliente) {
+      return res.status(400).json({
+        ok: false,
+        error: "Dados do cliente não informados."
+      });
+    }
+
+    if (!produto) {
+      return res.status(400).json({
+        ok: false,
+        error: "Produto não informado."
+      });
+    }
+
+    const nome = String(cliente.nome || "").trim();
+    const email = String(cliente.email || "").trim();
+    const telefone = String(
+      cliente.telefone || ""
+    ).trim();
+
+    const cpf = String(cliente.cpf || "").trim();
+
+    const cep = String(cliente.cep || "").trim();
+
+    const endereco = String(
+      cliente.endereco || ""
+    ).trim();
+
+    const numero = String(
+      cliente.numero || ""
+    ).trim();
+
+    const complemento = String(
+      cliente.complemento || ""
+    ).trim();
+
+    const cidade = String(
+      cliente.cidade || ""
+    ).trim();
+
+    const estado = String(
+      cliente.estado || ""
+    ).trim();
+
+    const produtoId = Number(produto.id || 0);
+
+    const produtoNome = String(
+      produto.nome || "Relógio Premium importado"
+    ).trim();
+
+    const preco = Number(produto.preco);
+
+    if (!nome || !email) {
+      return res.status(400).json({
+        ok: false,
+        error: "Nome e e-mail são obrigatórios."
+      });
+    }
+
+    if (
+      !Number.isFinite(preco) ||
+      preco <= 0
+    ) {
+      return res.status(400).json({
+        ok: false,
+        error: "Valor do produto inválido."
+      });
+    }
+
+    // ==================================================
+    // REFERÊNCIA DO PEDIDO
+    // ==================================================
+
+    const referencia =
+      "LUXOR-" +
+      Date.now() +
+      "-" +
+      Math.floor(Math.random() * 10000);
+
+    // ==================================================
+    // INSERE PEDIDO NO BANCO
+    // ==================================================
+
+    const [resultado] = await pool.query(
+      `
+      INSERT INTO pedidos
+      (
+        produto_id,
+        produto_nome,
+        quantidade,
+        valor,
+        nome,
+        email,
+        telefone,
+        cpf,
+        cep,
+        endereco,
+        numero,
+        complemento,
+        cidade,
+        estado,
+        status,
+        payment_status,
+        pagbank_reference_id
+      )
+      VALUES
+      (
+        ?,
+        ?,
+        1,
+        ?,
+        ?,
+        ?,
+        ?,
+        ?,
+        ?,
+        ?,
+        ?,
+        ?,
+        ?,
+        ?,
+        'AGUARDANDO_PAGAMENTO',
+        'PENDING',
+        ?
+      )
+      `,
+      [
+        produtoId,
+        produtoNome,
+        preco,
+        nome,
+        email,
+        telefone,
+        cpf,
+        cep,
+        endereco,
+        numero,
+        complemento,
+        cidade,
+        estado,
+        referencia
+      ]
+    );
+
+    const pedidoId = resultado.insertId;
+
+    // ==================================================
+    // PAGBANK
+    // ==================================================
+
+    if (!PAGBANK_TOKEN) {
+      return res.status(500).json({
+        ok: false,
+        error: "PAGBANK_TOKEN não configurado."
+      });
+    }
+
+    const valorCentavos =
+      Math.round(preco * 100);
+
+    const customer = {
+      name: nome,
+      email: email,
+      tax_id: cpf.replace(/\D/g, "")
+    };
+
+    const checkoutPayload = {
+      reference_id: referencia,
+
+      customer,
+
+      customer_modifiable: true,
+
+      items: [
+        {
+          reference_id: String(
+            produtoId || 1
+          ),
+
+          name: produtoNome,
+
+          quantity: 1,
+
+          unit_amount: valorCentavos
+        }
+      ],
+
+      payment_methods: [
+        {
+          type: "CREDIT_CARD"
+        },
+        {
+          type: "PIX"
+        },
+        {
+          type: "BOLETO"
+        }
+      ],
+
+      redirect_url:
+        PUBLIC_URL +
+        "/pagamento-retorno.html",
+
+      return_url:
+        PUBLIC_URL +
+        "/index.html",
+
+      notification_urls: [
+        PUBLIC_URL +
+          "/api/pagbank/webhook"
+      ]
+    };
+
+    console.log(
+      "Criando checkout PagBank:",
+      referencia
+    );
+
+    const respostaPagBank = await fetch(
+      PAGBANK_API + "/checkouts",
+      {
+        method: "POST",
+
+        headers: {
+          Authorization:
+            "Bearer " + PAGBANK_TOKEN,
+
+          "Content-Type":
+            "application/json",
+
+          Accept:
+            "application/json"
+        },
+
+        body: JSON.stringify(
+          checkoutPayload
+        )
+      }
+    );
+
+    const dadosPagBank =
+      await respostaPagBank.json();
+
+    if (!respostaPagBank.ok) {
+      console.error(
+        "Erro PagBank:",
+        dadosPagBank
+      );
+
+      return res.status(502).json({
+        ok: false,
+        error:
+          "Erro ao criar pagamento no PagBank.",
+        detalhe: dadosPagBank
+      });
+    }
+
+    // ==================================================
+    // PEGA LINK DE PAGAMENTO
+    // ==================================================
+
+    let payLink = null;
+
+    if (
+      Array.isArray(
+        dadosPagBank.links
+      )
+    ) {
+      const link =
+        dadosPagBank.links.find(
+          item =>
+            item.rel ===
+              "PAY" ||
+            item.rel ===
+              "payment"
+        );
+
+      if (link) {
+        payLink = link.href;
+      }
+    }
+
+    if (!payLink) {
+      payLink =
+        dadosPagBank.payment_link ||
+        dadosPagBank.pay_link ||
+        null;
+    }
+
+    const pagbankCheckoutId =
+      dadosPagBank.id || null;
+
+    // ==================================================
+    // ATUALIZA PEDIDO
+    // ==================================================
+
+    await pool.query(
+      `
+      UPDATE pedidos
+      SET
+        pagbank_checkout_id = ?,
+        payment_status = 'PENDING'
+      WHERE id = ?
+      `,
+      [
+        pagbankCheckoutId,
+        pedidoId
+      ]
+    );
+
+    // ==================================================
+    // RESPOSTA
+    // ==================================================
 
     res.json({
-
       ok: true,
-
-      produtos:
-        produtos
-
+      pedidoId,
+      pagbankCheckoutId,
+      payLink
     });
 
   } catch (error) {
-
     console.error(
-      "Erro ao buscar produtos:",
+      "Erro ao criar pedido:",
       error
     );
 
     res.status(500).json({
-
       ok: false,
-
       error:
-        "Não foi possível carregar os produtos.",
-
-      detalhes:
-        error.message
-
+        error.message ||
+        "Erro interno ao criar pedido."
     });
-
   }
-
 });
 
+// ======================================================
+// RESUMO DO PAINEL ADMINISTRATIVO
+// ======================================================
 
-/* =========================================================
-   CRIAR PEDIDO
-========================================================= */
-
-app.post(
-  "/api/pedidos",
+app.get(
+  "/api/admin/resumo",
   async (req, res) => {
-
-    let connection = null;
-
     try {
-
-      if (!PAGBANK_TOKEN) {
-
-        return res.status(500).json({
-
-          ok: false,
-
-          error:
-            "PAGBANK_TOKEN não configurado no Render."
-
-        });
-
-      }
-
-
-      const {
-        cliente,
-        produto
-      } = req.body;
-
-
-      if (!cliente) {
-
-        return res.status(400).json({
-
-          ok: false,
-
-          error:
-            "Dados do cliente não foram enviados."
-
-        });
-
-      }
-
-
-      if (!produto) {
-
-        return res.status(400).json({
-
-          ok: false,
-
-          error:
-            "Produto não foi enviado."
-
-        });
-
-      }
-
-
-      /* =========================
-         CLIENTE
-      ========================= */
-
-      const nome =
-        String(
-          cliente.nome || ""
-        ).trim();
-
-      const email =
-        String(
-          cliente.email || ""
-        ).trim();
-
-      const telefone =
-        String(
-          cliente.telefone || ""
-        ).replace(/\D/g, "");
-
-      const cpf =
-        String(
-          cliente.cpf || ""
-        ).replace(/\D/g, "");
-
-      const cep =
-        String(
-          cliente.cep || ""
-        ).trim();
-
-      const estado =
-        String(
-          cliente.estado || ""
-        ).trim();
-
-      const endereco =
-        String(
-          cliente.endereco || ""
-        ).trim();
-
-      const numero =
-        String(
-          cliente.numero || ""
-        ).trim();
-
-      const complemento =
-        String(
-          cliente.complemento || ""
-        ).trim();
-
-      const cidade =
-        String(
-          cliente.cidade || ""
-        ).trim();
-
-
-      /* =========================
-         PRODUTO
-      ========================= */
-
-      const produtoId =
-        Number(
-          produto.id || 0
-        );
-
-      const produtoNome =
-        String(
-          produto.nome ||
-          "Relógio Premium importado"
-        ).trim();
-
-      const preco =
-        Number(
-          produto.preco
-        );
-
-
-      /* =========================
-         VALIDAÇÕES
-      ========================= */
-
-      if (!nome) {
-
-        return res.status(400).json({
-
-          ok: false,
-
-          error:
-            "Informe o nome completo."
-
-        });
-
-      }
-
-
-      if (!email) {
-
-        return res.status(400).json({
-
-          ok: false,
-
-          error:
-            "Informe o e-mail."
-
-        });
-
-      }
-
-
-      if (
-        !Number.isFinite(preco) ||
-        preco <= 0
-      ) {
-
-        return res.status(400).json({
-
-          ok: false,
-
-          error:
-            "Valor do produto inválido."
-
-        });
-      }
-
-
-      /* =====================================================
-         REFERÊNCIA DO PEDIDO
-      ===================================================== */
-
-      const referencia =
-        "LUXOR-" +
-        Date.now() +
-        "-" +
-        Math.floor(Math.random() * 10000);
-
-
-      /* =====================================================
-         CONEXÃO COM BANCO
-      ===================================================== */
-
-      connection =
-        await pool.getConnection();
-
-
-      /* =====================================================
-         SALVAR PEDIDO
-      ===================================================== */
-
-      const [resultado] =
-        await connection.execute(
-          `
-          INSERT INTO pedidos
-          (
-            produto_id,
-            produto_nome,
-            quantidade,
-            valor,
-            nome,
-            email,
-            telefone,
-            cpf,
-            cep,
-            endereco,
-            numero,
-            complemento,
-            cidade,
-            estado,
-            status,
-            payment_status,
-            pagbank_reference_id
-          )
-          VALUES
-          (
-            ?,
-            ?,
-            1,
-            ?,
-            ?,
-            ?,
-            ?,
-            ?,
-            ?,
-            ?,
-            ?,
-            ?,
-            ?,
-            ?,
-            'AGUARDANDO_PAGAMENTO',
-            'PENDING',
-            ?
-          )
-          `,
-          [
-            produtoId,
-            produtoNome,
-            preco,
-            nome,
-            email,
-            telefone || null,
-            cpf || null,
-            cep || null,
-            endereco || null,
-            numero || null,
-            complemento || null,
-            cidade || null,
-            estado || null,
-            referencia
-          ]
-        );
-
-
-      const pedidoId =
-        resultado.insertId;
-
-
-      /* =====================================================
-         CLIENTE PAGBANK
-      ===================================================== */
-
-      const customer = {
-        name: nome,
-        email: email
-      };
-
-
-      if (cpf.length === 11) {
-        customer.tax_id = cpf;
-      }
-
-
-      /* =====================================================
-         TELEFONE
-      ===================================================== */
-
-      if (telefone.length >= 10) {
-
-        let telefonePagBank =
-          telefone;
-
-        if (
-          telefonePagBank.startsWith("55")
-        ) {
-          telefonePagBank =
-            telefonePagBank.substring(2);
-        }
-
-        const area =
-          telefonePagBank.substring(0, 2);
-
-        const numeroTelefone =
-          telefonePagBank.substring(2);
-
-        if (
-          area.length === 2 &&
-          numeroTelefone.length >= 8
-        ) {
-
-          customer.phone = {
-            country: "+55",
-            area: area,
-            number: numeroTelefone
-          };
-
-        }
-
-      }
-
-
-      /* =====================================================
-         VALOR EM CENTAVOS
-      ===================================================== */
-
-      const valorCentavos =
-        Math.round(preco * 100);
-
-
-      /* =====================================================
-         CHECKOUT PAGBANK
-      ===================================================== */
-
-      const checkoutBody = {
-
-        reference_id:
-          referencia,
-
-        customer:
-          customer,
-
-        customer_modifiable:
-          true,
-
-        items: [
-          {
-            reference_id:
-              String(produtoId || 1),
-
-            name:
-              produtoNome,
-
-            quantity:
-              1,
-
-            unit_amount:
-              valorCentavos
-          }
-        ],
-
-        payment_methods: [
-          {
-            type:
-              "CREDIT_CARD"
-          },
-          {
-            type:
-              "PIX"
-          },
-          {
-            type:
-              "BOLETO"
-          }
-        ],
-
-        redirect_url:
-          PUBLIC_URL +
-          "/pagamento-retorno.html",
-
-        return_url:
-          PUBLIC_URL +
-          "/index.html",
-
-        notification_urls: [
-          PUBLIC_URL +
-          "/api/pagbank/webhook"
-        ]
-
-      };
-
-
-      console.log(
-        "Criando checkout PagBank..."
-      );
-
-
-      /* =====================================================
-         PAGBANK
-      ===================================================== */
-
-      const pagbankResponse =
-        await fetch(
-          PAGBANK_API + "/checkouts",
-          {
-            method: "POST",
-
-            headers: {
-              "Authorization":
-                "Bearer " +
-                PAGBANK_TOKEN,
-
-              "Content-Type":
-                "application/json",
-
-              "Accept":
-                "application/json"
-            },
-
-            body:
-              JSON.stringify(
-                checkoutBody
-              )
-          }
-        );
-
-
-      const respostaTexto =
-        await pagbankResponse.text();
-
-
-      let pagbankData;
-
-
-      try {
-
-        pagbankData =
-          JSON.parse(
-            respostaTexto
-          );
-
-      } catch (error) {
-
-        console.error(
-          "Resposta inválida do PagBank:",
-          respostaTexto
-        );
-
-        return res.status(502).json({
-          ok: false,
-          error:
-            "O PagBank retornou uma resposta inválida.",
-          detalhes:
-            respostaTexto
-        });
-
-      }
-
-
-      if (!pagbankResponse.ok) {
-
-        console.error(
-          "Erro PagBank:",
-          JSON.stringify(
-            pagbankData,
-            null,
-            2
-          )
-        );
-
-        return res.status(
-          pagbankResponse.status
-        ).json({
-
-          ok: false,
-
-          error:
-            "O PagBank recusou a criação do checkout.",
-
-          detalhes:
-            pagbankData,
-
-          pedidoId:
-            pedidoId
-
-        });
-
-      }
-
-
-      /* =====================================================
-         ID CHECKOUT
-      ===================================================== */
-
-      const pagbankCheckoutId =
-        pagbankData.id || null;
-
-
-      /* =====================================================
-         LINK PAGAMENTO
-      ===================================================== */
-
-      let payLink = null;
-
-
-      if (
-        Array.isArray(
-          pagbankData.links
-        )
-      ) {
-
-        const pay =
-          pagbankData.links.find(
-            link =>
-              link.rel === "PAY"
-          );
-
-        if (pay) {
-          payLink =
-            pay.href;
-        }
-
-      }
-
-
-      if (!payLink) {
-
-        console.error(
-          "Link PAY não encontrado."
-        );
-
-        return res.status(502).json({
-
-          ok: false,
-
-          error:
-            "O PagBank criou o checkout, mas não retornou o link de pagamento.",
-
-          pedidoId:
-            pedidoId,
-
-          pagbankCheckoutId:
-            pagbankCheckoutId
-
-        });
-
-      }
-
-
-      /* =====================================================
-         ATUALIZAR PEDIDO
-      ===================================================== */
-
-      await connection.execute(
-        `
-        UPDATE pedidos
-
-        SET
-          pagbank_checkout_id = ?,
-          status = 'AGUARDANDO_PAGAMENTO'
-
-        WHERE id = ?
-        `,
-        [
-          pagbankCheckoutId,
-          pedidoId
-        ]
-      );
-
-
-      return res.json({
-
-        ok: true,
-
-        pedidoId:
-          pedidoId,
-
-        pagbankCheckoutId:
-          pagbankCheckoutId,
-
-        payLink:
-          payLink
-
+      const [rows] =
+        await pool.query(`
+          SELECT
+            COUNT(*) AS quantidade,
+            COALESCE(
+              SUM(valor),
+              0
+            ) AS total,
+
+            COUNT(
+              DISTINCT email
+            ) AS clientes,
+
+            MAX(criado_em) AS ultima
+
+          FROM pedidos
+
+          WHERE
+            payment_status = 'PAID'
+
+            OR status IN (
+              'PAGO',
+              'PAID',
+              'APROVADO',
+              'APPROVED'
+            )
+        `);
+
+      res.json({
+        quantidade:
+          Number(
+            rows[0].quantidade || 0
+          ),
+
+        total:
+          Number(
+            rows[0].total || 0
+          ),
+
+        clientes:
+          Number(
+            rows[0].clientes || 0
+          ),
+
+        ultima:
+          rows[0].ultima || null
       });
 
-
     } catch (error) {
-
       console.error(
-        "ERRO /api/pedidos:",
+        "Erro no resumo do admin:",
         error
       );
 
-      return res.status(500).json({
-
+      res.status(500).json({
         ok: false,
-
         error:
-          error.message ||
-          "Erro interno ao criar pedido."
-
+          "Erro ao carregar resumo administrativo."
       });
-
-    } finally {
-
-      if (connection) {
-        connection.release();
-      }
-
     }
-
   }
 );
 
+// ======================================================
+// PEDIDOS APROVADOS
+// ======================================================
 
-/* =========================================================
-   WEBHOOK PAGBANK
-========================================================= */
+app.get(
+  "/api/admin/pedidos",
+  async (req, res) => {
+    try {
+      const {
+        q,
+        inicio,
+        fim
+      } = req.query;
+
+      let sql = `
+        SELECT
+          id,
+          criado_em,
+          nome,
+          email,
+          produto_nome,
+          valor,
+          status,
+          payment_status,
+          pagbank_checkout_id
+        FROM pedidos
+        WHERE
+          payment_status = 'PAID'
+          OR status IN (
+            'PAGO',
+            'PAID',
+            'APROVADO',
+            'APPROVED'
+          )
+      `;
+
+      const valores = [];
+
+      // ==================================================
+      // BUSCA
+      // ==================================================
+
+      if (q) {
+        sql += `
+          AND (
+            CAST(id AS CHAR) LIKE ?
+            OR nome LIKE ?
+            OR email LIKE ?
+            OR cpf LIKE ?
+            OR produto_nome LIKE ?
+          )
+        `;
+
+        const busca =
+          "%" + q + "%";
+
+        valores.push(
+          busca,
+          busca,
+          busca,
+          busca,
+          busca
+        );
+      }
+
+      // ==================================================
+      // DATA INICIAL
+      // ==================================================
+
+      if (inicio) {
+        sql += `
+          AND criado_em >= ?
+        `;
+
+        valores.push(
+          inicio + " 00:00:00"
+        );
+      }
+
+      // ==================================================
+      // DATA FINAL
+      // ==================================================
+
+      if (fim) {
+        sql += `
+          AND criado_em <= ?
+        `;
+
+        valores.push(
+          fim + " 23:59:59"
+        );
+      }
+
+      sql += `
+        ORDER BY criado_em DESC
+      `;
+
+      const [rows] =
+        await pool.query(
+          sql,
+          valores
+        );
+
+      res.json(rows);
+
+    } catch (error) {
+      console.error(
+        "Erro ao listar pedidos:",
+        error
+      );
+
+      res.status(500).json({
+        ok: false,
+        error:
+          "Erro ao listar pedidos."
+      });
+    }
+  }
+);
+
+// ======================================================
+// DETALHES DE UM PEDIDO
+// ======================================================
+
+app.get(
+  "/api/admin/pedidos/:id",
+  async (req, res) => {
+    try {
+      const id =
+        Number(req.params.id);
+
+      if (!Number.isInteger(id)) {
+        return res.status(400).json({
+          ok: false,
+          error:
+            "ID do pedido inválido."
+        });
+      }
+
+      const [rows] =
+        await pool.query(
+          `
+          SELECT
+            *
+          FROM pedidos
+          WHERE id = ?
+          LIMIT 1
+          `,
+          [id]
+        );
+
+      if (!rows.length) {
+        return res.status(404).json({
+          ok: false,
+          error:
+            "Pedido não encontrado."
+        });
+      }
+
+      res.json(rows[0]);
+
+    } catch (error) {
+      console.error(
+        "Erro ao consultar pedido:",
+        error
+      );
+
+      res.status(500).json({
+        ok: false,
+        error:
+          "Erro ao consultar pedido."
+      });
+    }
+  }
+);
+
+// ======================================================
+// WEBHOOK PAGBANK
+// ======================================================
 
 app.post(
   "/api/pagbank/webhook",
   async (req, res) => {
-
-    let connection = null;
-
     try {
-
       console.log(
-        "WEBHOOK PAGBANK RECEBIDO"
+        "Webhook PagBank recebido:"
       );
 
       console.log(
@@ -865,402 +780,95 @@ app.post(
         )
       );
 
-
-      const dados =
+      const body =
         req.body || {};
 
-
-      const referencia =
-        dados.reference_id ||
-        dados.order?.reference_id ||
-        dados.checkout?.reference_id ||
+      const referenceId =
+        body.reference_id ||
+        body.referenceId ||
         null;
 
-
-      const checkoutId =
-        dados.id ||
-        dados.checkout?.id ||
+      const status =
+        body.status ||
         null;
-
-
-      let statusPagamento =
-        dados.status ||
-        dados.payment?.status ||
-        dados.charges?.[0]?.status ||
-        dados.order?.charges?.[0]?.status ||
-        null;
-
-
-      if (statusPagamento) {
-
-        statusPagamento =
-          String(
-            statusPagamento
-          ).toUpperCase();
-
-      }
-
 
       if (
-        !referencia &&
-        !checkoutId
+        referenceId &&
+        status
       ) {
+        let paymentStatus =
+          "PENDING";
 
-        return res.status(200).json({
-          ok: true
-        });
-
-      }
-
-
-      connection =
-        await pool.getConnection();
-
-
-      let rows;
-
-
-      if (referencia) {
-
-        [rows] =
-          await connection.execute(
-            `
-            SELECT *
-            FROM pedidos
-            WHERE pagbank_reference_id = ?
-            LIMIT 1
-            `,
-            [
-              referencia
-            ]
-          );
-
-      } else {
-
-        [rows] =
-          await connection.execute(
-            `
-            SELECT *
-            FROM pedidos
-            WHERE pagbank_checkout_id = ?
-            LIMIT 1
-            `,
-            [
-              checkoutId
-            ]
-          );
-
-      }
-
-
-      if (rows.length === 0) {
-
-        return res.status(200).json({
-          ok: true
-        });
-
-      }
-
-
-      const pedido =
-        rows[0];
-
-
-      let statusPedido =
-        pedido.status;
-
-
-      if (
-        statusPagamento === "PAID"
-      ) {
-
-        statusPedido = "PAGO";
-
-      } else if (
-        statusPagamento === "AUTHORIZED"
-      ) {
-
-        statusPedido = "AUTORIZADO";
-
-      } else if (
-        statusPagamento === "IN_ANALYSIS"
-      ) {
-
-        statusPedido = "EM_ANALISE";
-
-      } else if (
-        statusPagamento === "DECLINED"
-      ) {
-
-        statusPedido = "RECUSADO";
-
-      } else if (
-        statusPagamento === "CANCELED"
-      ) {
-
-        statusPedido = "CANCELADO";
-
-      } else if (
-        statusPagamento === "WAITING"
-      ) {
-
-        statusPedido =
+        let pedidoStatus =
           "AGUARDANDO_PAGAMENTO";
 
+        if (
+          status === "PAID" ||
+          status === "APPROVED"
+        ) {
+          paymentStatus =
+            "PAID";
+
+          pedidoStatus =
+            "PAGO";
+        }
+
+        if (
+          status === "CANCELED" ||
+          status === "CANCELLED"
+        ) {
+          paymentStatus =
+            "CANCELED";
+
+          pedidoStatus =
+            "CANCELADO";
+        }
+
+        await pool.query(
+          `
+          UPDATE pedidos
+          SET
+            payment_status = ?,
+            status = ?
+          WHERE pagbank_reference_id = ?
+          `,
+          [
+            paymentStatus,
+            pedidoStatus,
+            referenceId
+          ]
+        );
       }
 
-
-      const paymentId =
-        dados.payment_id ||
-        dados.payment?.id ||
-        dados.charges?.[0]?.id ||
-        dados.order?.charges?.[0]?.id ||
-        null;
-
-
-      await connection.execute(
-        `
-        UPDATE pedidos
-
-        SET
-          status = ?,
-          payment_status = ?,
-          pagbank_payment_id =
-            COALESCE(
-              ?,
-              pagbank_payment_id
-            )
-
-        WHERE id = ?
-        `,
-        [
-          statusPedido,
-
-          statusPagamento ||
-            pedido.payment_status,
-
-          paymentId,
-
-          pedido.id
-        ]
-      );
-
-
-      return res.status(200).json({
+      res.status(200).json({
         ok: true
       });
 
-
     } catch (error) {
-
       console.error(
-        "Erro no webhook:",
+        "Erro no webhook PagBank:",
         error
       );
 
-      return res.status(200).json({
+      res.status(500).json({
         ok: false
       });
-
-    } finally {
-
-      if (connection) {
-        connection.release();
-      }
-
     }
-
   }
 );
 
-
-/* =========================================================
-   ADMIN - LISTAR PEDIDOS
-========================================================= */
-
-app.get(
-  "/api/admin/pedidos",
-  async (req, res) => {
-
-    try {
-
-      const [pedidos] =
-        await pool.query(
-          `
-          SELECT
-            id AS pedido,
-            criado_em AS data_compra,
-            produto_id,
-            produto_nome AS produto,
-            quantidade,
-            valor,
-            nome AS cliente,
-            email,
-            telefone,
-            cpf,
-            cep,
-            endereco,
-            numero,
-            complemento,
-            cidade,
-            estado,
-            status,
-            payment_status,
-            pagbank_checkout_id,
-            pagbank_reference_id,
-            pagbank_payment_id,
-            atualizado_em
-
-          FROM pedidos
-
-          ORDER BY id DESC
-          `
-        );
-
-
-      res.json({
-
-        ok: true,
-
-        pedidos:
-          pedidos
-
-      });
-
-
-    } catch (error) {
-
-      console.error(
-        "Erro ao listar pedidos:",
-        error
-      );
-
-      res.status(500).json({
-
-        ok: false,
-
-        error:
-          "Não foi possível carregar os pedidos.",
-
-        detalhes:
-          error.message
-
-      });
-
-    }
-
-  }
-);
-
-
-/* =========================================================
-   ADMIN - BUSCAR PEDIDO
-========================================================= */
-
-app.get(
-  "/api/admin/pedidos/:id",
-  async (req, res) => {
-
-    try {
-
-      const id =
-        Number(
-          req.params.id
-        );
-
-
-      if (
-        !Number.isInteger(id)
-      ) {
-
-        return res.status(400).json({
-
-          ok: false,
-
-          error:
-            "ID de pedido inválido."
-
-        });
-
-      }
-
-
-      const [rows] =
-        await pool.execute(
-          `
-          SELECT *
-          FROM pedidos
-          WHERE id = ?
-          LIMIT 1
-          `,
-          [
-            id
-          ]
-        );
-
-
-      if (rows.length === 0) {
-
-        return res.status(404).json({
-
-          ok: false,
-
-          error:
-            "Pedido não encontrado."
-
-        });
-
-      }
-
-
-      res.json({
-
-        ok: true,
-
-        pedido:
-          rows[0]
-
-      });
-
-
-    } catch (error) {
-
-      console.error(
-        "Erro ao consultar pedido:",
-        error
-      );
-
-      res.status(500).json({
-
-        ok: false,
-
-        error:
-          "Erro ao consultar pedido.",
-
-        detalhes:
-          error.message
-
-      });
-
-    }
-
-  }
-);
-
-
-/* =========================================================
-   API NÃO ENCONTRADA
-========================================================= */
+// ======================================================
+// FALLBACK DA API
+// ======================================================
 
 app.use(
   (req, res, next) => {
-
     if (
-      req.path.startsWith("/api")
+      req.path.startsWith(
+        "/api"
+      )
     ) {
-
       return res.status(404).json({
-
         ok: false,
 
         error:
@@ -1270,77 +878,47 @@ app.use(
           req.method +
           " " +
           req.originalUrl
-
       });
-
     }
 
     next();
-
   }
 );
 
-
-/* =========================================================
-   ERRO GERAL
-========================================================= */
+// ======================================================
+// ERRO GERAL
+// ======================================================
 
 app.use(
-  (err, req, res, next) => {
-
+  (
+    error,
+    req,
+    res,
+    next
+  ) => {
     console.error(
-      "ERRO GERAL:",
-      err
+      "Erro geral:",
+      error
     );
 
-
-    if (
-      req.path.startsWith("/api")
-    ) {
-
-      return res.status(500).json({
-
-        ok: false,
-
-        error:
-          "Erro interno do servidor.",
-
-        detalhes:
-          err.message
-
-      });
-
-    }
-
-
-    res.status(500).send(
-      "Erro interno do servidor."
-    );
-
+    res.status(500).json({
+      ok: false,
+      error:
+        "Erro interno do servidor."
+    });
   }
 );
 
-
-/* =========================================================
-   INICIAR SERVIDOR
-========================================================= */
+// ======================================================
+// INICIAR SERVIDOR
+// ======================================================
 
 app.listen(
   PORT,
   "0.0.0.0",
   () => {
-
     console.log(
-      "================================"
-    );
-
-    console.log(
-      "LUXOR ONLINE"
-    );
-
-    console.log(
-      "Porta:",
-      PORT
+      `LUXOR rodando na porta ${PORT}`
     );
 
     console.log(
@@ -1352,16 +930,5 @@ app.listen(
       "URL:",
       PUBLIC_URL
     );
-
-    console.log(
-      "Banco:",
-      process.env.DB_NAME ||
-      "lojadereilogio"
-    );
-
-    console.log(
-      "================================"
-    );
-
   }
 );
